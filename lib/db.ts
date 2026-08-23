@@ -1,104 +1,122 @@
 import fs from 'fs';
 import path from 'path';
-import { Plant, PlantVariety, SiteSettings, GalleryItem } from './types';
+import { Plant, SiteSettings, GalleryItem } from './types';
 
-const dataDir = path.join(process.cwd(), 'data');
-const plantsFile = path.join(dataDir, 'plants.json');
-const settingsFile = path.join(dataDir, 'settings.json');
-const galleryFile = path.join(dataDir, 'gallery.json');
+// Root data directory
+const rootDataDir = path.join(process.cwd(), 'data');
+const tmpDataDir = path.join('/tmp', 'nursery_data');
 
-function ensureDataDir() {
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+// In-memory runtime cache for serverless fallback
+let memoryPlants: Plant[] | null = null;
+let memorySettings: SiteSettings | null = null;
+let memoryGallery: GalleryItem[] | null = null;
+
+function ensureDataDir(targetDir: string) {
+  try {
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+  } catch (err) {
+    // ignore if read-only
   }
+}
+
+function safeWriteJSON(filename: string, data: any): boolean {
+  const rootPath = path.join(rootDataDir, filename);
+  const tmpPath = path.join(tmpDataDir, filename);
+
+  // Try writing to root data directory
+  try {
+    ensureDataDir(rootDataDir);
+    fs.writeFileSync(rootPath, JSON.stringify(data, null, 2), 'utf8');
+    return true;
+  } catch (error: any) {
+    // If read-only filesystem (Vercel serverless), fallback to /tmp/
+    try {
+      ensureDataDir(tmpDataDir);
+      fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf8');
+      return true;
+    } catch (tmpError) {
+      console.error(`Failed to write ${filename} to /tmp:`, tmpError);
+      return false;
+    }
+  }
+}
+
+function safeReadJSON<T>(filename: string, defaultData: T): T {
+  const rootPath = path.join(rootDataDir, filename);
+  const tmpPath = path.join(tmpDataDir, filename);
+
+  // 1. Check /tmp first (in case updated at runtime in serverless)
+  try {
+    if (fs.existsSync(tmpPath)) {
+      const content = fs.readFileSync(tmpPath, 'utf8');
+      return JSON.parse(content) as T;
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  // 2. Read from root data directory
+  try {
+    if (fs.existsSync(rootPath)) {
+      const content = fs.readFileSync(rootPath, 'utf8');
+      return JSON.parse(content) as T;
+    }
+  } catch (err) {
+    console.error(`Error reading ${filename} from root data dir:`, err);
+  }
+
+  return defaultData;
 }
 
 export function getPlants(): Plant[] {
-  try {
-    ensureDataDir();
-    if (!fs.existsSync(plantsFile)) return [];
-    const content = fs.readFileSync(plantsFile, 'utf8');
-    return JSON.parse(content) as Plant[];
-  } catch (error) {
-    console.error('Error reading plants.json:', error);
-    return [];
-  }
+  if (memoryPlants) return memoryPlants;
+  const plants = safeReadJSON<Plant[]>('plants.json', []);
+  memoryPlants = plants;
+  return plants;
 }
 
 export function savePlants(plants: Plant[]): boolean {
-  try {
-    ensureDataDir();
-    fs.writeFileSync(plantsFile, JSON.stringify(plants, null, 2), 'utf8');
-    return true;
-  } catch (error) {
-    console.error('Error writing plants.json:', error);
-    return false;
-  }
+  memoryPlants = plants;
+  return safeWriteJSON('plants.json', plants);
 }
 
 export function getGalleryItems(): GalleryItem[] {
-  try {
-    ensureDataDir();
-    if (!fs.existsSync(galleryFile)) return [];
-    const content = fs.readFileSync(galleryFile, 'utf8');
-    return JSON.parse(content) as GalleryItem[];
-  } catch (error) {
-    console.error('Error reading gallery.json:', error);
-    return [];
-  }
+  if (memoryGallery) return memoryGallery;
+  const items = safeReadJSON<GalleryItem[]>('gallery.json', []);
+  memoryGallery = items;
+  return items;
 }
 
 export function saveGalleryItems(items: GalleryItem[]): boolean {
-  try {
-    ensureDataDir();
-    fs.writeFileSync(galleryFile, JSON.stringify(items, null, 2), 'utf8');
-    return true;
-  } catch (error) {
-    console.error('Error writing gallery.json:', error);
-    return false;
-  }
+  memoryGallery = items;
+  return safeWriteJSON('gallery.json', items);
 }
 
+const defaultSettings: SiteSettings = {
+  logoUrl: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=300&auto=format&fit=crop&q=80',
+  nurseryName: 'Rani Channamma Hitech Nursery',
+  locationTagline: 'Inchageri, Vijayapura',
+  phone1: '+91 9611710898',
+  phone2: '+91 7353509658',
+  whatsappNumber: '919611710898',
+  address: 'Horti Road, Inchageri, Vijayapura, Karnataka - 586117',
+  timings: 'Monday - Sunday: 7:00 AM - 7:00 PM',
+  googleMapsUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d15254.567223841123!2d75.8341!3d17.2023!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTfCsDEyJzA4LjMiTiA3NcKwNTAnMDIuOCJF!5e0!3m2!1sen!2sin!4v1700000000000!5m2!1sen!2sin',
+};
+
 export function getSettings(): SiteSettings {
-  try {
-    ensureDataDir();
-    if (!fs.existsSync(settingsFile)) {
-      return {
-        logoUrl: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=300&auto=format&fit=crop&q=80',
-        nurseryName: 'Rani Channamma Hitech Nursery',
-        locationTagline: 'Inchageri, Vijayapura',
-        phone1: '+91 9611710898',
-        phone2: '+91 7353509658',
-        whatsappNumber: '919611710898',
-        address: 'Horti Road, Inchageri, Vijayapura, Karnataka - 586117',
-        timings: 'Monday - Sunday: 7:00 AM - 7:00 PM',
-      };
-    }
-    const content = fs.readFileSync(settingsFile, 'utf8');
-    return JSON.parse(content) as SiteSettings;
-  } catch (error) {
-    console.error('Error reading settings.json:', error);
-    return {
-      logoUrl: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=300&auto=format&fit=crop&q=80',
-      nurseryName: 'Rani Channamma Hitech Nursery',
-      locationTagline: 'Inchageri, Vijayapura',
-      phone1: '+91 9611710898',
-      phone2: '+91 7353509658',
-      whatsappNumber: '919611710898',
-      address: 'Horti Road, Inchageri, Vijayapura, Karnataka - 586117',
-      timings: 'Monday - Sunday: 7:00 AM - 7:00 PM',
-    };
-  }
+  if (memorySettings) return memorySettings;
+  const settings = safeReadJSON<SiteSettings>('settings.json', defaultSettings);
+  memorySettings = { ...defaultSettings, ...settings };
+  return memorySettings;
 }
 
 export function saveSettings(settings: Partial<SiteSettings>): SiteSettings {
   const current = getSettings();
   const updated = { ...current, ...settings };
-  try {
-    ensureDataDir();
-    fs.writeFileSync(settingsFile, JSON.stringify(updated, null, 2), 'utf8');
-  } catch (error) {
-    console.error('Error saving settings.json:', error);
-  }
+  memorySettings = updated;
+  safeWriteJSON('settings.json', updated);
   return updated;
 }

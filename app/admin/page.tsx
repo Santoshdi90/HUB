@@ -8,11 +8,9 @@ import {
   Sprout, 
   Camera, 
   Settings, 
-  ShieldCheck, 
   LogOut, 
   Home, 
   ExternalLink,
-  MessageSquare,
   Lock
 } from 'lucide-react';
 import LoginForm from '@/components/admin/LoginForm';
@@ -22,23 +20,24 @@ import BrandingSettings from '@/components/admin/BrandingSettings';
 import SecuritySettings from '@/components/admin/SecuritySettings';
 import { Plant, PlantVariety, SiteSettings, StockStatus } from '@/lib/types';
 
+const defaultSettings: SiteSettings = {
+  logoUrl: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=300&auto=format&fit=crop&q=80',
+  nurseryName: 'Rani Channamma Hitech Nursery',
+  locationTagline: 'Inchageri, Vijayapura',
+  phone1: '+91 9611710898',
+  phone2: '+91 7353509658',
+  whatsappNumber: '919611710898',
+  address: 'Horti Road, Inchageri, Vijayapura, Karnataka - 586117',
+  timings: 'Monday - Sunday: 7:00 AM - 7:00 PM',
+};
+
 export default function AdminPage() {
   const router = useRouter();
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<'inventory' | 'gallery' | 'branding' | 'security'>('inventory');
   
   const [plants, setPlants] = useState<Plant[]>([]);
-  const [settings, setSettings] = useState<SiteSettings>({
-    logoUrl: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=300&auto=format&fit=crop&q=80',
-    nurseryName: 'Rani Channamma Hitech Nursery',
-    locationTagline: 'Inchageri, Vijayapura',
-    phone1: '+91 9611710898',
-    phone2: '+91 7353509658',
-    whatsappNumber: '919611710898',
-    address: 'Horti Road, Inchageri, Vijayapura, Karnataka - 586117',
-    timings: 'Monday - Sunday: 7:00 AM - 7:00 PM',
-  });
-
+  const [settings, setSettings] = useState<SiteSettings>(defaultSettings);
   const [loading, setLoading] = useState(true);
 
   // Check Auth Session
@@ -58,6 +57,19 @@ export default function AdminPage() {
 
   const fetchAdminData = async () => {
     setLoading(true);
+    // 1. Try local cache
+    try {
+      const cachedSettings = localStorage.getItem('nursery_settings_v2');
+      if (cachedSettings) {
+        setSettings((prev) => ({ ...prev, ...JSON.parse(cachedSettings) }));
+      }
+      const cachedPlants = localStorage.getItem('nursery_plants_v2');
+      if (cachedPlants) {
+        setPlants(JSON.parse(cachedPlants));
+      }
+    } catch (e) {}
+
+    // 2. Fetch from API
     try {
       const [plantsRes, settingsRes] = await Promise.all([
         fetch('/api/plants'),
@@ -67,10 +79,15 @@ export default function AdminPage() {
       if (plantsRes.ok) {
         const p = await plantsRes.json();
         setPlants(p);
+        try { localStorage.setItem('nursery_plants_v2', JSON.stringify(p)); } catch (e) {}
       }
       if (settingsRes.ok) {
         const s = await settingsRes.json();
-        setSettings(s);
+        setSettings((prev) => {
+          const merged = { ...prev, ...s };
+          try { localStorage.setItem('nursery_settings_v2', JSON.stringify(merged)); } catch (e) {}
+          return merged;
+        });
       }
     } catch (err) {
       console.error('Failed to load admin data:', err);
@@ -146,16 +163,28 @@ export default function AdminPage() {
     if (res.ok) fetchAdminData();
   };
 
-  // Settings Handler
+  // Settings Handler (Logo, phone, address, timings)
   const handleSaveSettings = async (updatedSettings: Partial<SiteSettings>) => {
+    // Optimistic update to state & localStorage
+    setSettings((prev) => {
+      const merged = { ...prev, ...updatedSettings };
+      try { localStorage.setItem('nursery_settings_v2', JSON.stringify(merged)); } catch (e) {}
+      return merged;
+    });
+
     const res = await fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updatedSettings),
     });
+
     if (res.ok) {
       const data = await res.json();
-      setSettings(data);
+      setSettings((prev) => {
+        const merged = { ...prev, ...data };
+        try { localStorage.setItem('nursery_settings_v2', JSON.stringify(merged)); } catch (e) {}
+        return merged;
+      });
     }
   };
 
