@@ -1,0 +1,42 @@
+[
+  {
+    "id": "gal-1787482955935",
+    "title": "plant",
+    "category": "Greenhouse",
+    "imageUrl": "/uploads/1787482954331_vegetable-plant-nursery.jpg",
+    "caption": "",
+    "uploadedAt": "2026-08-23"
+  },
+  {
+    "id": "gal-1787478483011",
+    "title": "plants",
+    "category": "Greenhouse",
+    "imageUrl": "/uploads/1787478481856_product-jpeg.jpg",
+    "caption": "",
+    "uploadedAt": "2026-08-23"
+  },
+  {
+    "id": "gal-1787478461336",
+    "title": "flowers",
+    "category": "Greenhouse",
+    "imageUrl": "/uploads/1787478457896_krs-nursery-gardens-all-plants-available-visakhapatnam-1783855661472.webp",
+    "caption": "",
+    "uploadedAt": "2026-08-23"
+  },
+  {
+    "id": "gal-1787478430283",
+    "title": "flowers",
+    "category": "Greenhouse",
+    "imageUrl": "/uploads/1787478428833_images.jpeg",
+    "caption": "",
+    "uploadedAt": "2026-08-23"
+  },
+  {
+    "id": "gal-1787478392380",
+    "title": "Plants",
+    "category": "Greenhouse",
+    "imageUrl": "/uploads/1787478387678_gms-nursery-farms-hosur-vegetable-nurseries-npcd576e2d.jpg.webp",
+    "caption": "",
+    "uploadedAt": "2026-08-23"
+  }
+]
