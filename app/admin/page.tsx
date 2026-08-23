@@ -19,6 +19,13 @@ import GalleryManager from '@/components/admin/GalleryManager';
 import BrandingSettings from '@/components/admin/BrandingSettings';
 import SecuritySettings from '@/components/admin/SecuritySettings';
 import { Plant, PlantVariety, SiteSettings, StockStatus } from '@/lib/types';
+import {
+  getStoredSettings,
+  saveStoredSettings,
+  getStoredPlants,
+  saveStoredPlants,
+  EVENT_STORE_UPDATED,
+} from '@/lib/persistentStore';
 
 const defaultSettings: SiteSettings = {
   logoUrl: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=300&auto=format&fit=crop&q=80',
@@ -57,19 +64,12 @@ export default function AdminPage() {
 
   const fetchAdminData = async () => {
     setLoading(true);
-    // 1. Try local cache
-    try {
-      const cachedSettings = localStorage.getItem('nursery_settings_v2');
-      if (cachedSettings) {
-        setSettings((prev) => ({ ...prev, ...JSON.parse(cachedSettings) }));
-      }
-      const cachedPlants = localStorage.getItem('nursery_plants_v2');
-      if (cachedPlants) {
-        setPlants(JSON.parse(cachedPlants));
-      }
-    } catch (e) {}
+    // 1. Hydrate from persistent store
+    setSettings(getStoredSettings(defaultSettings));
+    const cachedPlants = getStoredPlants();
+    if (cachedPlants) setPlants(cachedPlants);
 
-    // 2. Fetch from API
+    // 2. Fetch API
     try {
       const [plantsRes, settingsRes] = await Promise.all([
         fetch('/api/plants'),
@@ -78,16 +78,18 @@ export default function AdminPage() {
 
       if (plantsRes.ok) {
         const p = await plantsRes.json();
-        setPlants(p);
-        try { localStorage.setItem('nursery_plants_v2', JSON.stringify(p)); } catch (e) {}
+        const localP = getStoredPlants();
+        if (!localP || localP.length === 0) {
+          setPlants(p);
+          saveStoredPlants(p);
+        } else {
+          setPlants(localP);
+        }
       }
+
       if (settingsRes.ok) {
         const s = await settingsRes.json();
-        setSettings((prev) => {
-          const merged = { ...prev, ...s };
-          try { localStorage.setItem('nursery_settings_v2', JSON.stringify(merged)); } catch (e) {}
-          return merged;
-        });
+        setSettings(getStoredSettings({ ...defaultSettings, ...s }));
       }
     } catch (err) {
       console.error('Failed to load admin data:', err);
@@ -99,6 +101,15 @@ export default function AdminPage() {
   useEffect(() => {
     checkAuth();
     fetchAdminData();
+
+    const handleUpdate = () => {
+      setSettings(getStoredSettings(defaultSettings));
+      const p = getStoredPlants();
+      if (p) setPlants(p);
+    };
+
+    window.addEventListener(EVENT_STORE_UPDATED, handleUpdate);
+    return () => window.removeEventListener(EVENT_STORE_UPDATED, handleUpdate);
   }, []);
 
   const handleLogout = async () => {
@@ -108,84 +119,164 @@ export default function AdminPage() {
 
   // Crop CRUD Handlers
   const handleAddPlant = async (plantData: Partial<Plant>) => {
-    const res = await fetch('/api/plants', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(plantData),
-    });
-    if (res.ok) fetchAdminData();
+    const newPlant: Plant = {
+      id: `crop-${Date.now()}`,
+      commonName: plantData.commonName || '',
+      scientificName: plantData.scientificName || '',
+      category: plantData.category || 'Vegetables & Commercial Saplings',
+      imageUrl: plantData.imageUrl || '',
+      description: plantData.description || '',
+      varieties: plantData.varieties || [],
+    };
+    const updatedPlants = [newPlant, ...plants];
+    setPlants(updatedPlants);
+    saveStoredPlants(updatedPlants);
+
+    try {
+      await fetch('/api/plants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(plantData),
+      });
+    } catch (e) {}
   };
 
   const handleUpdatePlant = async (id: string, plantData: Partial<Plant>) => {
-    const res = await fetch(`/api/plants/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(plantData),
-    });
-    if (res.ok) fetchAdminData();
+    const updatedPlants = plants.map((p) => (p.id === id ? { ...p, ...plantData } : p));
+    setPlants(updatedPlants);
+    saveStoredPlants(updatedPlants);
+
+    try {
+      await fetch(`/api/plants/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(plantData),
+      });
+    } catch (e) {}
   };
 
   const handleDeletePlant = async (id: string) => {
-    const res = await fetch(`/api/plants/${id}`, { method: 'DELETE' });
-    if (res.ok) fetchAdminData();
+    const updatedPlants = plants.filter((p) => p.id !== id);
+    setPlants(updatedPlants);
+    saveStoredPlants(updatedPlants);
+
+    try {
+      await fetch(`/api/plants/${id}`, { method: 'DELETE' });
+    } catch (e) {}
   };
 
   // Variety CRUD Handlers
   const handleAddVariety = async (varietyData: Partial<PlantVariety>) => {
-    const res = await fetch('/api/varieties', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(varietyData),
+    const plantId = varietyData.plantId;
+    if (!plantId) return;
+
+    const newVar: PlantVariety = {
+      id: `var-${Date.now()}`,
+      plantId,
+      varietyName: varietyData.varietyName || '',
+      price: Number(varietyData.price) || 1.0,
+      unit: varietyData.unit || 'per sapling',
+      stockStatus: varietyData.stockStatus || 'In Stock',
+      imageUrl: varietyData.imageUrl || '',
+      yieldTraits: varietyData.yieldTraits || '',
+      daysToMaturity: varietyData.daysToMaturity || '60 days',
+      careGuidelines: varietyData.careGuidelines || '',
+      isPopular: Boolean(varietyData.isPopular),
+    };
+
+    const updatedPlants = plants.map((p) => {
+      if (p.id === plantId) {
+        return { ...p, varieties: [newVar, ...(p.varieties || [])] };
+      }
+      return p;
     });
-    if (res.ok) fetchAdminData();
+
+    setPlants(updatedPlants);
+    saveStoredPlants(updatedPlants);
+
+    try {
+      await fetch('/api/varieties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(varietyData),
+      });
+    } catch (e) {}
   };
 
   const handleUpdateVariety = async (id: string, varietyData: Partial<PlantVariety>) => {
-    const res = await fetch(`/api/varieties/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(varietyData),
+    const updatedPlants = plants.map((p) => {
+      if (!p.varieties) return p;
+      const vIndex = p.varieties.findIndex((v) => v.id === id);
+      if (vIndex !== -1) {
+        const updatedVars = [...p.varieties];
+        updatedVars[vIndex] = { ...updatedVars[vIndex], ...varietyData };
+        return { ...p, varieties: updatedVars };
+      }
+      return p;
     });
-    if (res.ok) fetchAdminData();
+
+    setPlants(updatedPlants);
+    saveStoredPlants(updatedPlants);
+
+    try {
+      await fetch(`/api/varieties/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(varietyData),
+      });
+    } catch (e) {}
   };
 
   const handleToggleVarietyStock = async (id: string, stockStatus: StockStatus) => {
-    const res = await fetch(`/api/varieties/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stockStatus }),
+    const updatedPlants = plants.map((p) => {
+      if (!p.varieties) return p;
+      const vIndex = p.varieties.findIndex((v) => v.id === id);
+      if (vIndex !== -1) {
+        const updatedVars = [...p.varieties];
+        updatedVars[vIndex] = { ...updatedVars[vIndex], stockStatus };
+        return { ...p, varieties: updatedVars };
+      }
+      return p;
     });
-    if (res.ok) fetchAdminData();
+
+    setPlants(updatedPlants);
+    saveStoredPlants(updatedPlants);
+
+    try {
+      await fetch(`/api/varieties/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stockStatus }),
+      });
+    } catch (e) {}
   };
 
   const handleDeleteVariety = async (id: string) => {
-    const res = await fetch(`/api/varieties/${id}`, { method: 'DELETE' });
-    if (res.ok) fetchAdminData();
+    const updatedPlants = plants.map((p) => {
+      if (!p.varieties) return p;
+      return { ...p, varieties: p.varieties.filter((v) => v.id !== id) };
+    });
+
+    setPlants(updatedPlants);
+    saveStoredPlants(updatedPlants);
+
+    try {
+      await fetch(`/api/varieties/${id}`, { method: 'DELETE' });
+    } catch (e) {}
   };
 
-  // Settings Handler (Logo, phone, address, timings)
+  // Settings Handler
   const handleSaveSettings = async (updatedSettings: Partial<SiteSettings>) => {
-    // Optimistic update to state & localStorage
-    setSettings((prev) => {
-      const merged = { ...prev, ...updatedSettings };
-      try { localStorage.setItem('nursery_settings_v2', JSON.stringify(merged)); } catch (e) {}
-      return merged;
-    });
+    const updated = saveStoredSettings(updatedSettings, defaultSettings);
+    setSettings(updated);
 
-    const res = await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedSettings),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      setSettings((prev) => {
-        const merged = { ...prev, ...data };
-        try { localStorage.setItem('nursery_settings_v2', JSON.stringify(merged)); } catch (e) {}
-        return merged;
+    try {
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedSettings),
       });
-    }
+    } catch (e) {}
   };
 
   if (authenticated === false) {
@@ -223,6 +314,7 @@ export default function AdminPage() {
                 alt={settings.nurseryName}
                 fill
                 className="object-cover p-0.5"
+                unoptimized
               />
             </div>
             <div>

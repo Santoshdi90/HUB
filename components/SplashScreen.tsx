@@ -5,23 +5,37 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { Sparkles, ArrowRight, ShieldCheck } from 'lucide-react';
 import { SiteSettings } from '@/lib/types';
+import { getStoredSettings, EVENT_STORE_UPDATED } from '@/lib/persistentStore';
 
 interface SplashScreenProps {
   settings: SiteSettings;
   onComplete: () => void;
 }
 
-export default function SplashScreen({ settings, onComplete }: SplashScreenProps) {
+export default function SplashScreen({ settings: initialSettings, onComplete }: SplashScreenProps) {
   const [isVisible, setIsVisible] = useState(true);
+  const [settings, setSettings] = useState<SiteSettings>(initialSettings);
 
   useEffect(() => {
+    // Hydrate active logo & settings from browser store
+    setSettings(getStoredSettings(initialSettings));
+
+    const handleStoreUpdate = () => {
+      setSettings(getStoredSettings(initialSettings));
+    };
+
+    window.addEventListener(EVENT_STORE_UPDATED, handleStoreUpdate);
+
     // Auto transition after 1.8s
     const timer = setTimeout(() => {
       handleComplete();
     }, 1800);
 
-    return () => clearTimeout(timer);
-  }, []);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener(EVENT_STORE_UPDATED, handleStoreUpdate);
+    };
+  }, [initialSettings]);
 
   const handleComplete = () => {
     setIsVisible(false);
@@ -61,6 +75,7 @@ export default function SplashScreen({ settings, onComplete }: SplashScreenProps
                   fill
                   className="object-cover p-1 rounded-full"
                   priority
+                  unoptimized
                 />
               </div>
               <motion.div

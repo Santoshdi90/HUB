@@ -9,6 +9,7 @@ import GallerySection from '@/components/GallerySection';
 import ContactSection from '@/components/ContactSection';
 import Footer from '@/components/Footer';
 import { Plant, SiteSettings } from '@/lib/types';
+import { getStoredSettings, getStoredPlants, saveStoredPlants, EVENT_STORE_UPDATED } from '@/lib/persistentStore';
 
 const defaultSettings: SiteSettings = {
   logoUrl: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=300&auto=format&fit=crop&q=80',
@@ -30,21 +31,14 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Hydrate from localStorage first for instant dynamic logo & settings update
-    try {
-      const cachedSettings = localStorage.getItem('nursery_settings_v2');
-      if (cachedSettings) {
-        setSettings((prev) => ({ ...prev, ...JSON.parse(cachedSettings) }));
-      }
-      const cachedPlants = localStorage.getItem('nursery_plants_v2');
-      if (cachedPlants) {
-        setPlants(JSON.parse(cachedPlants));
-      }
-    } catch (e) {
-      // ignore
+    // 1. Hydrate from persistent store before API fetch
+    setSettings(getStoredSettings(defaultSettings));
+    const cachedPlants = getStoredPlants();
+    if (cachedPlants) {
+      setPlants(cachedPlants);
     }
 
-    // 2. Fetch fresh data from API
+    // 2. Fetch fresh data from API and sync
     async function loadInitialData() {
       try {
         const [plantsRes, settingsRes] = await Promise.all([
@@ -54,21 +48,18 @@ export default function HomePage() {
 
         if (plantsRes.ok) {
           const plantsData = await plantsRes.json();
-          setPlants(plantsData);
-          try {
-            localStorage.setItem('nursery_plants_v2', JSON.stringify(plantsData));
-          } catch (e) {}
+          const localPlants = getStoredPlants();
+          if (!localPlants || localPlants.length === 0) {
+            setPlants(plantsData);
+            saveStoredPlants(plantsData);
+          } else {
+            setPlants(localPlants);
+          }
         }
 
         if (settingsRes.ok) {
           const settingsData = await settingsRes.json();
-          setSettings((prev) => {
-            const merged = { ...prev, ...settingsData };
-            try {
-              localStorage.setItem('nursery_settings_v2', JSON.stringify(merged));
-            } catch (e) {}
-            return merged;
-          });
+          setSettings(getStoredSettings({ ...defaultSettings, ...settingsData }));
         }
       } catch (err) {
         console.error('Failed loading page data:', err);
@@ -78,6 +69,16 @@ export default function HomePage() {
     }
 
     loadInitialData();
+
+    // 3. Listen for store updates
+    const handleStoreUpdate = () => {
+      setSettings(getStoredSettings(defaultSettings));
+      const p = getStoredPlants();
+      if (p) setPlants(p);
+    };
+
+    window.addEventListener(EVENT_STORE_UPDATED, handleStoreUpdate);
+    return () => window.removeEventListener(EVENT_STORE_UPDATED, handleStoreUpdate);
   }, []);
 
   const scrollToCatalog = () => {

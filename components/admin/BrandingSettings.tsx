@@ -1,24 +1,25 @@
 'use client';
 
 import { useState } from 'react';
-import { Save, Phone, MapPin, Clock, MessageSquare, Check, RefreshCw } from 'lucide-react';
+import { Save, Check } from 'lucide-react';
 import { SiteSettings } from '@/lib/types';
 import ImageUploader from './ImageUploader';
+import { saveStoredSettings } from '@/lib/persistentStore';
 
 interface BrandingSettingsProps {
   settings: SiteSettings;
   onSaveSettings: (updated: Partial<SiteSettings>) => Promise<void>;
 }
 
-export default function BrandingSettings({ settings, onSaveSettings }: BrandingSettingsProps) {
-  const [logoUrl, setLogoUrl] = useState(settings.logoUrl);
-  const [nurseryName, setNurseryName] = useState(settings.nurseryName);
-  const [locationTagline, setLocationTagline] = useState(settings.locationTagline);
-  const [phone1, setPhone1] = useState(settings.phone1);
-  const [phone2, setPhone2] = useState(settings.phone2);
-  const [whatsappNumber, setWhatsappNumber] = useState(settings.whatsappNumber);
-  const [address, setAddress] = useState(settings.address);
-  const [timings, setTimings] = useState(settings.timings);
+export default function BrandingSettings({ settings: initialSettings, onSaveSettings }: BrandingSettingsProps) {
+  const [logoUrl, setLogoUrl] = useState(initialSettings.logoUrl);
+  const [nurseryName, setNurseryName] = useState(initialSettings.nurseryName);
+  const [locationTagline, setLocationTagline] = useState(initialSettings.locationTagline);
+  const [phone1, setPhone1] = useState(initialSettings.phone1);
+  const [phone2, setPhone2] = useState(initialSettings.phone2);
+  const [whatsappNumber, setWhatsappNumber] = useState(initialSettings.whatsappNumber);
+  const [address, setAddress] = useState(initialSettings.address);
+  const [timings, setTimings] = useState(initialSettings.timings);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -27,17 +28,23 @@ export default function BrandingSettings({ settings, onSaveSettings }: BrandingS
     setSaving(true);
     setSavedSuccess(false);
 
+    const updatedData: Partial<SiteSettings> = {
+      logoUrl,
+      nurseryName,
+      locationTagline,
+      phone1,
+      phone2,
+      whatsappNumber,
+      address,
+      timings,
+    };
+
+    // 1. Save directly to persistent browser store for immediate refresh & cross-tab sync
+    saveStoredSettings(updatedData, initialSettings);
+
+    // 2. Trigger API update
     try {
-      await onSaveSettings({
-        logoUrl,
-        nurseryName,
-        locationTagline,
-        phone1,
-        phone2,
-        whatsappNumber,
-        address,
-        timings,
-      });
+      await onSaveSettings(updatedData);
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
     } catch (err) {
@@ -55,7 +62,7 @@ export default function BrandingSettings({ settings, onSaveSettings }: BrandingS
         <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold flex items-center justify-between shadow-sm animate-fadeIn">
           <div className="flex items-center gap-2">
             <Check className="w-5 h-5 text-emerald-600" />
-            <span>Nursery Branding & Contact details updated successfully! Changes reflected across site immediately.</span>
+            <span>Nursery Branding & Contact details updated successfully! Reflected across site immediately.</span>
           </div>
         </div>
       )}
@@ -71,7 +78,10 @@ export default function BrandingSettings({ settings, onSaveSettings }: BrandingS
 
         <ImageUploader
           currentUrl={logoUrl}
-          onImageChange={(url) => setLogoUrl(url)}
+          onImageChange={(url) => {
+            setLogoUrl(url);
+            saveStoredSettings({ logoUrl: url }, initialSettings);
+          }}
         />
       </div>
 

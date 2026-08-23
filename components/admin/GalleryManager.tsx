@@ -1,9 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Camera, Plus, Trash2, Save, X, Image as ImageIcon } from 'lucide-react';
+import { Camera, Plus, Trash2, Save, X } from 'lucide-react';
 import { GalleryItem } from '@/lib/types';
 import ImageUploader from './ImageUploader';
+import {
+  getStoredGallery,
+  saveStoredGallery,
+  addStoredGalleryItem,
+  deleteStoredGalleryItem,
+  EVENT_STORE_UPDATED,
+} from '@/lib/persistentStore';
 
 export default function GalleryManager() {
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
@@ -19,11 +26,24 @@ export default function GalleryManager() {
 
   const fetchGallery = async () => {
     setLoading(true);
+    // 1. Hydrate from persistent store
+    const stored = getStoredGallery();
+    if (stored) {
+      setGalleryItems(stored);
+    }
+
+    // 2. Fetch API
     try {
       const res = await fetch('/api/gallery');
       if (res.ok) {
-        const data = await res.json();
-        setGalleryItems(data);
+        const apiData = await res.json();
+        const localStored = getStoredGallery();
+        if (!localStored || localStored.length === 0) {
+          setGalleryItems(apiData);
+          saveStoredGallery(apiData);
+        } else {
+          setGalleryItems(localStored);
+        }
       }
     } catch (err) {
       console.error('Failed fetching gallery:', err);
@@ -34,6 +54,14 @@ export default function GalleryManager() {
 
   useEffect(() => {
     fetchGallery();
+
+    const handleUpdate = () => {
+      const updated = getStoredGallery();
+      if (updated) setGalleryItems(updated);
+    };
+
+    window.addEventListener(EVENT_STORE_UPDATED, handleUpdate);
+    return () => window.removeEventListener(EVENT_STORE_UPDATED, handleUpdate);
   }, []);
 
   const handleAddPhoto = async (e: React.FormEvent) => {
@@ -41,38 +69,52 @@ export default function GalleryManager() {
     if (!title || !imageUrl) return;
 
     setSaving(true);
+    const newItem: GalleryItem = {
+      id: `gal-${Date.now()}`,
+      title,
+      category,
+      imageUrl,
+      caption,
+      uploadedAt: new Date().toISOString().split('T')[0],
+    };
+
+    // 1. Add to persistent store immediately
+    const updatedList = addStoredGalleryItem(newItem, galleryItems);
+    setGalleryItems(updatedList);
+    setIsAddOpen(false);
+
+    // Reset inputs
+    setTitle('');
+    setImageUrl('');
+    setCaption('');
+    setSaving(false);
+
+    // 2. Sync to API in background
     try {
-      const res = await fetch('/api/gallery', {
+      await fetch('/api/gallery', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, category, imageUrl, caption }),
+        body: JSON.stringify(newItem),
       });
-
-      if (res.ok) {
-        setIsAddOpen(false);
-        setTitle('');
-        setImageUrl('');
-        setCaption('');
-        fetchGallery();
-      }
     } catch (err) {
-      console.error('Error adding photo:', err);
-    } finally {
-      setSaving(false);
+      console.error('Error syncing gallery to API:', err);
     }
   };
 
   const handleDeletePhoto = async (id: string) => {
     if (!confirm('Are you sure you want to remove this photo from the nursery gallery?')) return;
+
+    // 1. Delete from persistent store immediately
+    const updatedList = deleteStoredGalleryItem(id, galleryItems);
+    setGalleryItems(updatedList);
+
+    // 2. Sync to API
     try {
-      const res = await fetch(`/api/gallery?id=${id}`, {
+      await fetch(`/api/gallery?id=${id}`, {
         method: 'DELETE',
       });
-      if (res.ok) {
-        setGalleryItems((prev) => prev.filter((i) => i.id !== id));
-      }
     } catch (err) {
-      console.error('Error deleting photo:', err);
+      console.error('Error deleting photo from API:', err);
     }
   };
 

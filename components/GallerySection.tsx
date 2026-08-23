@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Camera, X, Maximize2, Sparkles, ShieldCheck, ChevronRight } from 'lucide-react';
+import { Camera, X, Maximize2 } from 'lucide-react';
 import { GalleryItem } from '@/lib/types';
+import { getStoredGallery, saveStoredGallery, EVENT_STORE_UPDATED } from '@/lib/persistentStore';
 
 export default function GallerySection() {
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
@@ -11,18 +12,41 @@ export default function GallerySection() {
   const [activeLightboxItem, setActiveLightboxItem] = useState<GalleryItem | null>(null);
 
   useEffect(() => {
+    // 1. Hydrate from persistent local store first
+    const stored = getStoredGallery();
+    if (stored) {
+      setGalleryItems(stored);
+    }
+
+    // 2. Fetch from API and merge
     async function loadGallery() {
       try {
         const res = await fetch('/api/gallery');
         if (res.ok) {
-          const data = await res.json();
-          setGalleryItems(data);
+          const apiData = await res.json();
+          const localStored = getStoredGallery();
+          if (!localStored || localStored.length === 0) {
+            setGalleryItems(apiData);
+            saveStoredGallery(apiData);
+          } else {
+            // Keep localStored as truth if present
+            setGalleryItems(localStored);
+          }
         }
       } catch (err) {
         console.error('Failed to load gallery:', err);
       }
     }
+
     loadGallery();
+
+    const handleUpdate = () => {
+      const updated = getStoredGallery();
+      if (updated) setGalleryItems(updated);
+    };
+
+    window.addEventListener(EVENT_STORE_UPDATED, handleUpdate);
+    return () => window.removeEventListener(EVENT_STORE_UPDATED, handleUpdate);
   }, []);
 
   const categories = ['All', 'Greenhouse', 'Root Trainers', 'Polyhouse', 'Shade Net', 'Farm Delivery'];
