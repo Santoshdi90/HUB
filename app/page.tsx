@@ -48,18 +48,14 @@ export default function HomePage() {
 
         if (plantsRes.ok) {
           const plantsData = await plantsRes.json();
-          const localPlants = getStoredPlants();
-          if (!localPlants || localPlants.length === 0) {
-            setPlants(plantsData);
-            saveStoredPlants(plantsData);
-          } else {
-            setPlants(localPlants);
-          }
+          setPlants(plantsData);
+          saveStoredPlants(plantsData);
         }
 
         if (settingsRes.ok) {
           const settingsData = await settingsRes.json();
-          setSettings(getStoredSettings({ ...defaultSettings, ...settingsData }));
+          const mergedSettings = { ...defaultSettings, ...settingsData };
+          setSettings(mergedSettings);
         }
       } catch (err) {
         console.error('Failed loading page data:', err);

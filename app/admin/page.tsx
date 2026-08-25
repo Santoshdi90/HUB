@@ -78,18 +78,14 @@ export default function AdminPage() {
 
       if (plantsRes.ok) {
         const p = await plantsRes.json();
-        const localP = getStoredPlants();
-        if (!localP || localP.length === 0) {
-          setPlants(p);
-          saveStoredPlants(p);
-        } else {
-          setPlants(localP);
-        }
+        setPlants(p);
+        saveStoredPlants(p);
       }
 
       if (settingsRes.ok) {
         const s = await settingsRes.json();
-        setSettings(getStoredSettings({ ...defaultSettings, ...s }));
+        const mergedSettings = { ...defaultSettings, ...s };
+        setSettings(mergedSettings);
       }
     } catch (err) {
       console.error('Failed to load admin data:', err);

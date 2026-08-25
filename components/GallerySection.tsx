@@ -24,14 +24,8 @@ export default function GallerySection() {
         const res = await fetch('/api/gallery');
         if (res.ok) {
           const apiData = await res.json();
-          const localStored = getStoredGallery();
-          if (!localStored || localStored.length === 0) {
-            setGalleryItems(apiData);
-            saveStoredGallery(apiData);
-          } else {
-            // Keep localStored as truth if present
-            setGalleryItems(localStored);
-          }
+          setGalleryItems(apiData);
+          saveStoredGallery(apiData);
         }
       } catch (err) {
         console.error('Failed to load gallery:', err);

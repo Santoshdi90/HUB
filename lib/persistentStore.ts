@@ -2,9 +2,9 @@
 
 import { SiteSettings, GalleryItem, Plant } from './types';
 
-const SETTINGS_KEY = 'nursery_settings_v3';
-const GALLERY_KEY = 'nursery_gallery_v3';
-const PLANTS_KEY = 'nursery_plants_v3';
+const SETTINGS_KEY = 'nursery_settings_v4';
+const GALLERY_KEY = 'nursery_gallery_v4';
+const PLANTS_KEY = 'nursery_plants_v4';
 
 export const EVENT_STORE_UPDATED = 'nursery_store_updated';
 
