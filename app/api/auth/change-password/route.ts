@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     if (settings.passwordHash) {
       isCurrentValid = await comparePassword(currentPassword, settings.passwordHash);
     } else {
-      const defaultPassword = process.env.ADMIN_PASSWORD || 'Rani@123';
+      const defaultPassword = process.env.ADMIN_PASSWORD || 'admin123';
       isCurrentValid = currentPassword === defaultPassword;
     }
 

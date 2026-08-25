@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     }
 
     const settings = getSettings();
-    const expectedUsername = process.env.ADMIN_USERNAME || 'Hanamant';
+    const expectedUsername = process.env.ADMIN_USERNAME || 'admin';
 
     // Check username
     if (username !== expectedUsername) {
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     if (settings.passwordHash) {
       isValidPassword = await comparePassword(password, settings.passwordHash);
     } else {
-      const defaultPassword = process.env.ADMIN_PASSWORD || 'Rani@123';
+      const defaultPassword = process.env.ADMIN_PASSWORD || 'admin123';
       if (password === defaultPassword) {
         isValidPassword = true;
         // Hash and store for future authentication
