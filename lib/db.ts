@@ -95,7 +95,7 @@ export function saveGalleryItems(items: GalleryItem[]): boolean {
 }
 
 const defaultSettings: SiteSettings = {
-  logoUrl: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=300&auto=format&fit=crop&q=80',
+  logoUrl: '/images/logo.jpg',
   nurseryName: 'Rani Channamma Hitech Nursery',
   locationTagline: 'Inchageri, Vijayapura',
   phone1: '+91 9611710898',
