@@ -12,7 +12,7 @@ import { Plant, SiteSettings } from '@/lib/types';
 import { getStoredSettings, getStoredPlants, saveStoredPlants, EVENT_STORE_UPDATED } from '@/lib/persistentStore';
 
 const defaultSettings: SiteSettings = {
-  logoUrl: '/images/logo.jpg',
+  logoUrl: '/logo.png',
   nurseryName: 'Rani Channamma Hitech Nursery',
   locationTagline: 'Inchageri, Vijayapura',
   phone1: '+91 9611710898',
